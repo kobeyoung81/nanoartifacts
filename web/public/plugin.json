@@ -1,0 +1,21 @@
+{
+  "contract": 1,
+  "plugin": "nanoartifacts",
+  "entry": "/nanoartifacts/plugins/nanoartifacts/remoteEntry.js",
+  "panels": [
+    {
+      "id": "library",
+      "title": { "zh-CN": "作品库", "en": "Library" },
+      "icon": "layers",
+      "slot": "right",
+      "mount": { "kind": "module", "module": "nanoartifacts/panels", "export": "LibraryPanel" }
+    },
+    {
+      "id": "document",
+      "title": { "zh-CN": "文档", "en": "Document" },
+      "icon": "file-text",
+      "slot": "center",
+      "mount": { "kind": "module", "module": "nanoartifacts/panels", "export": "DocumentPanel" }
+    }
+  ]
+}

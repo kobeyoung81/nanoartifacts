@@ -1,0 +1,48 @@
+/* Workbench panel mode.
+   A panel renders exactly one view — the tree, the node's details, or the
+   document — so there is no three-column frame, no resize grip and nothing to
+   animate between the views. The page keeps all of that. */
+
+.panel-root {
+  /* The height chain: host div → .plugin-nanoartifacts → .panel-root → .panel-view.
+     Miss one link and `height: 100%` resolves against an auto parent, which is
+     how the document frame collapsed to its 150px default. */
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-view {
+  /* Both: the percentage for a definite parent, the flex for the case where the
+     parent is a flex container (it is). */
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* The page's type scale lives on `body`, which the remote build scopes away,
+     and on `.nz`, which a panel does not render. Without it every view inherits
+     the portal's 16px and looks a size too large. */
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+/* The view that is on screen owns the whole panel. */
+.panel-view > .nz-side,
+.panel-view > .nz-detail {
+  /* `display` is set here as well as in `styles.css`: the page hides both
+     columns below 820px, and a panel that rendered a hidden view would be a
+     blank rectangle with no error to notice. */
+  display: flex;
+  width: 100%;
+  flex: 1 1 auto;
+  border: 0;
+  transition: none;
+}
+
+.panel-view > .nz-main {
+  flex: 1 1 auto;
+  min-height: 0;
+}
