@@ -5,30 +5,32 @@ MCP, users browse and share them in the portal.
 
 ## What it owns
 
-- **Its own MongoDB database** (`NANOARTIFACTS_MONGO_URI`). It is the second
-  component with a database connection and the only one that owns this one;
-  nothing else reads it, and it reads nothing else. Identity and agent ownership
-  are asked from the bus over HTTP.
-- **Metadata**: `artifacts`, `artifact_versions`, `artifact_grants`.
-- **Bodies**: a GridFS-compatible pair (`fs.files` / `fs.chunks`, 255 KiB
-  chunks) written directly, with the content's sha256 as the file id. Publishing
-  identical bytes twice therefore stores and charges them once.
+- **Its own collection prefix** (`artifacts_`) in the platform database
+  `nanosec`, reached through `NANOARTIFACTS_MONGO_URI`. Nothing outside this
+  service writes that prefix, and this service reads nothing outside it —
+  identity and agent ownership are asked from the bus over HTTP.
+- **Metadata**: `artifacts`, `artifacts_versions`, `artifacts_grants`,
+  `artifacts_spaces`, `artifacts_nodes`, `artifacts_uploads`.
+- **Bodies**: a GridFS-compatible pair (`artifacts_fs.files` /
+  `artifacts_fs.chunks`, 255 KiB chunks) written directly, with the content's
+  sha256 as the file id. Publishing identical bytes twice therefore stores and
+  charges them once.
 
 ## Why the ids look the way they do
 
-`fs.files._id` is the sha256 of the body. That is what makes dedupe free and a
+`artifacts_fs.files._id` is the sha256 of the body. That is what makes dedupe free and a
 publish idempotent. Chunk documents use `<hash>:<n>` as `_id` so no BSON
 ObjectID has to be generated for content that is already immutable.
 
 ## Layout and invariants
 
-- Bodies live in `fs.chunks`, keyed by `files_id = sha256`; there is no separate
+- Bodies live in `artifacts_fs.chunks`, keyed by `files_id = sha256`; there is no separate
   sharded directory on disk.
 
 - Blob first, version row second: a crash in between leaves an unreferenced
   body, which `gc` removes after an hour. The reverse order would leave a
   version whose content cannot be read.
-- `fs.files` is written last during an upload, so a reader never sees half a
+- `artifacts_fs.files` is written last during an upload, so a reader never sees half a
   document.
 - Deleting is a soft delete (`deleted_at`). The UI offers no recycle bin and
   promises no recovery; an operator can restore by clearing the field.

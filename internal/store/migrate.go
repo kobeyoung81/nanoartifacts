@@ -17,7 +17,11 @@ import (
 // only ever needs indexes, so validators, partial filters and TTLs are refused
 // by DisallowUnknownFields instead of half-implemented.
 
-const migrationsCollection = "schema_migrations"
+const migrationsCollection = "sys_migrations"
+
+// migrationService scopes this service's records inside the shared
+// sys_migrations collection (the bus writes its own there too).
+const migrationService = "artifacts"
 
 // MigrationInfo is one manifest and whether it has been applied.
 type MigrationInfo struct {
@@ -52,7 +56,8 @@ func (s *Store) Migrate(manifests map[string]string) ([]string, error) {
 			return ran, fmt.Errorf("migration %s: %w", name, err)
 		}
 		if _, err := s.db.Collection(migrationsCollection).InsertOne(ctx, bson.D{
-			{Key: "_id", Value: name},
+			{Key: "_id", Value: migrationService + ":" + name},
+			{Key: "service", Value: migrationService},
 			{Key: "applied_at", Value: time.Now().UTC()},
 		}); err != nil {
 			return ran, fmt.Errorf("migration %s: record: %w", name, err)
@@ -81,7 +86,7 @@ func (s *Store) MigrationStatus(manifests map[string]string) ([]MigrationInfo, e
 }
 
 func (s *Store) appliedMigrations(ctx context.Context) (map[string]time.Time, error) {
-	cur, err := s.db.Collection(migrationsCollection).Find(ctx, bson.D{})
+	cur, err := s.db.Collection(migrationsCollection).Find(ctx, bson.D{{Key: "service", Value: migrationService}})
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", migrationsCollection, err)
 	}
@@ -90,13 +95,13 @@ func (s *Store) appliedMigrations(ctx context.Context) (map[string]time.Time, er
 	out := make(map[string]time.Time)
 	for cur.Next(ctx) {
 		var doc struct {
-			Name      string    `bson:"_id"`
+			ID        string    `bson:"_id"`
 			AppliedAt time.Time `bson:"applied_at"`
 		}
 		if err := cur.Decode(&doc); err != nil {
 			return nil, fmt.Errorf("decode migration record: %w", err)
 		}
-		out[doc.Name] = doc.AppliedAt
+		out[strings.TrimPrefix(doc.ID, migrationService+":")] = doc.AppliedAt
 	}
 	return out, cur.Err()
 }

@@ -16,8 +16,8 @@ import (
 
 const (
 	artifactsCollection = "artifacts"
-	versionsCollection  = "artifact_versions"
-	grantsCollection    = "artifact_grants"
+	versionsCollection  = "artifacts_versions"
+	grantsCollection    = "artifacts_grants"
 )
 
 // Kinds this service accepts. The set mirrors nanowork's container kinds plus

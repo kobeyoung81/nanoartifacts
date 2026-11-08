@@ -19,7 +19,7 @@ import (
 // by this service (never a content hash — bodies are deduplicated globally, so a
 // hash would let a caller reference bytes it never uploaded), it belongs to one
 // owner, it expires, and it can be consumed once.
-const uploadsCollection = "uploads"
+const uploadsCollection = "artifacts_uploads"
 
 // UploadTTL is how long a body waits for the publish call that claims it.
 const UploadTTL = 15 * time.Minute

@@ -28,8 +28,8 @@ import (
 const ChunkSize = 255 * 1024
 
 const (
-	filesCollection  = "fs.files"
-	chunksCollection = "fs.chunks"
+	filesCollection  = "artifacts_fs.files"
+	chunksCollection = "artifacts_fs.chunks"
 )
 
 // Store is the narrow surface the server needs; an object store would implement

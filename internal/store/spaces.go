@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	spacesCollection      = "spaces"
-	spaceGrantsCollection = "space_grants"
-	nodesCollection       = "nodes"
+	spacesCollection      = "artifacts_spaces"
+	spaceGrantsCollection = "artifacts_space_grants"
+	nodesCollection       = "artifacts_nodes"
 )
 
 // Roles a space member can hold. The owner is not a grant row: it is the

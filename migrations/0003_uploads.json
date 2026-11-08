@@ -1,6 +1,6 @@
 {
   "collections": {
-    "uploads": {
+    "artifacts_uploads": {
       "indexes": [
         {
           "name": "expires_at",

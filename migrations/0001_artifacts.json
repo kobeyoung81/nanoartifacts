@@ -8,7 +8,7 @@
         }
       ]
     },
-    "artifact_versions": {
+    "artifacts_versions": {
       "indexes": [
         {
           "name": "artifact_seq_unique",
@@ -22,7 +22,7 @@
         }
       ]
     },
-    "artifact_grants": {
+    "artifacts_grants": {
       "indexes": [
         {
           "name": "user_artifact_unique",
