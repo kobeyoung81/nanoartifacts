@@ -20,7 +20,7 @@ type Config struct {
 	QuotaBytes    int64  // per-user ceiling, counted after content dedupe
 	BusURL        string // identity lookups (agent -> owner, user display names)
 	BusToken      string // shared internal token for the bus's REST surface
-	JWKSURL       string // nanoauth's keys, served through the bus
+	JWKSURL       string // nanoauth's key set, read directly (no proxy)
 	WebDir        string // built SPA; empty means API only
 	// CookiePath scopes the preview cookie. The default is "/" because the
 	// service is reached at different paths depending on deployment (directly
