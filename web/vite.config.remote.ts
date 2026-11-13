@@ -49,13 +49,20 @@ function scopeStyles(): Plugin {
 }
 
 export default defineConfig({
-  base: '/nanoartifacts/plugins/nanoartifacts/',
+  // Every module front end is served from /plugins/<id>/ (the design's single
+  // namespace): the portal's nginx maps it to this service, which keeps serving
+  // its own copy under /nanoartifacts/ as the rollback path.
+  base: '/plugins/artifacts/',
   plugins: [
     react(),
     federation({
       name: 'nanoartifacts',
       filename: 'remoteEntry.js',
-      exposes: { './panels': './src/plugin/panels.tsx' },
+      exposes: {
+        './panels': './src/plugin/panels.tsx',
+        // The full-page contribution: the library as a route the portal mounts.
+        './page': './src/plugin/page.tsx',
+      },
       shared: {
         react: { singleton: true, import: false },
         'react-dom': { singleton: true, import: false },

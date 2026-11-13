@@ -64,6 +64,12 @@ export type AppHost = {
   token: string
   locale: string
   mode: 'library' | 'document'
+  /**
+   * Which surface the host asked for. A panel renders one view inside the
+   * workbench; a page renders the whole three-column library. The mode alone
+   * cannot say it: both the library panel and the page are `library`.
+   */
+  surface?: 'panel' | 'page'
   route: string
   navigate: (hash: string) => void
 }
@@ -232,7 +238,7 @@ export function App({ host }: { host?: AppHost }) {
         navigate={navigate}
         spaces={spaces ?? []}
         onSpacesChanged={refreshSpaces}
-        panelView={host?.mode}
+        panelView={host && host.surface !== 'page' ? host.mode : undefined}
       />
     )
   } else if (route.name === 'work') {

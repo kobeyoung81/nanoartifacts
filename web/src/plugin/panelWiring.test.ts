@@ -16,7 +16,9 @@ import spaceMenu from '../library/SpaceMenu.tsx?raw'
 
 describe('panel assembly', () => {
   it('renders one view at a time, without the three-column frame', () => {
-    expect(app).toContain('panelView={host?.mode}')
+    // A panel renders one view; a page host asks for the whole library, which
+    // is why the surface is explicit rather than inferred from the mode.
+    expect(app).toContain("panelView={host && host.surface !== 'page' ? host.mode : undefined}")
     expect(app).toContain("useState<'tree' | 'detail'>('tree')")
     expect(app).toContain('screen === \'detail\' ?')
     expect(app).toContain('className="panel-view"')

@@ -34,9 +34,10 @@ const ALIASES = `
 .plugin-nanoartifacts { color-scheme: light; }
 html.dark .plugin-nanoartifacts { color-scheme: dark; }
 .plugin-nanoartifacts {
-  /* The wrapper the panel renders inside. Every rule in this bundle is written
-     as ".plugin-nanoartifacts ...", so this element has to exist here and has to
-     own the height the workbench gives the panel. */
+  /* The wrapper the panel or page renders inside. Every rule in this bundle is
+     written as ".plugin-nanoartifacts ...", so this element has to exist here and
+     has to own the height the workbench (or the portal's full-bleed layout)
+     gives it. */
   height: 100%;
   min-height: 0;
   display: flex;
@@ -54,7 +55,7 @@ html.dark .plugin-nanoartifacts { color-scheme: dark; }
 // The remote build has no index.html of its own, so nothing injects the
 // stylesheet the way a page load would. One <style> per page, shared by both
 // panels; the CSS is already scoped to this plugin at build time.
-function ensureStyles(): void {
+export function ensureStyles(): void {
   if (typeof document === 'undefined' || document.querySelector('style[data-plugin="nanoartifacts"]')) {
     return
   }

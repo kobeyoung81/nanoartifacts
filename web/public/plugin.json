@@ -1,21 +1,50 @@
 {
   "contract": 1,
   "plugin": "nanoartifacts",
-  "entry": "/nanoartifacts/plugins/nanoartifacts/remoteEntry.js",
+  "entry": "/plugins/artifacts/remoteEntry.js",
   "panels": [
     {
       "id": "library",
-      "title": { "zh-CN": "作品库", "en": "Library" },
+      "title": {
+        "zh-CN": "作品库",
+        "en": "Library"
+      },
       "icon": "layers",
       "slot": "right",
-      "mount": { "kind": "module", "module": "nanoartifacts/panels", "export": "LibraryPanel" }
+      "mount": {
+        "kind": "module",
+        "module": "nanoartifacts/panels",
+        "export": "LibraryPanel"
+      }
     },
     {
       "id": "document",
-      "title": { "zh-CN": "文档", "en": "Document" },
+      "title": {
+        "zh-CN": "文档",
+        "en": "Document"
+      },
       "icon": "file-text",
       "slot": "center",
-      "mount": { "kind": "module", "module": "nanoartifacts/panels", "export": "DocumentPanel" }
+      "mount": {
+        "kind": "module",
+        "module": "nanoartifacts/panels",
+        "export": "DocumentPanel"
+      }
+    }
+  ],
+  "pages": [
+    {
+      "id": "library",
+      "path": "/artifacts",
+      "title": {
+        "zh-CN": "作品库",
+        "en": "Library"
+      },
+      "mount": {
+        "kind": "module",
+        "module": "nanoartifacts/page",
+        "export": "LibraryPage"
+      }
     }
   ]
 }
