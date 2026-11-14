@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"gitee.com/kobeyoung81/nanoartifacts/internal/metrics"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
@@ -37,7 +39,11 @@ func Open(ctx context.Context, uri string) (*Store, error) {
 	connectCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	client, err := mongo.Connect(options.Client().ApplyURI(uri))
+	// One monitor per client: it feeds the module's database numbers (command
+	// counts and latency) without every call site having to time itself.
+	client, err := mongo.Connect(options.Client().
+		ApplyURI(uri).
+		SetMonitor(metrics.Monitor()))
 	if err != nil {
 		return nil, fmt.Errorf("connect: %w", err)
 	}

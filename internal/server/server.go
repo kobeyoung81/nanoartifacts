@@ -16,6 +16,7 @@ import (
 	"gitee.com/kobeyoung81/nanoartifacts/internal/auth"
 	"gitee.com/kobeyoung81/nanoartifacts/internal/blobstore"
 	"gitee.com/kobeyoung81/nanoartifacts/internal/identity"
+	"gitee.com/kobeyoung81/nanoartifacts/internal/metrics"
 	"gitee.com/kobeyoung81/nanoartifacts/internal/sign"
 	"gitee.com/kobeyoung81/nanoartifacts/internal/store"
 )
@@ -48,6 +49,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": s.Version})
 	})
+
+	// Operational numbers, anonymous: a scraper is infrastructure, and this
+	// route sits outside the per-route auth below.
+	mux.Handle("GET /metrics", metrics.Handler())
 
 	// Spaces and their trees. The space is the permission boundary: every
 	// route below resolves a role first and answers 404 to non-members.
@@ -99,7 +104,7 @@ func (s *Server) Routes() http.Handler {
 		mux.Handle("/", s.staticHandler())
 	}
 
-	return mux
+	return metrics.Middleware(mux)
 }
 
 type ctxKey string
