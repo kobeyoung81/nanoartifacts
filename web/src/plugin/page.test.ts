@@ -30,6 +30,15 @@ describe('page contribution', () => {
     expect(page).toContain("mode: 'library'")
     expect(page).toContain('data-nanoartifacts-page="library"')
   })
+
+  it('carries the box the absolutely-positioned layout needs', () => {
+    // `.nz` is `position: absolute; inset: 0`. With no positioned, height-carrying
+    // ancestor it resolves against the viewport, which covered the portal's 40px
+    // header. The wrapper below the page header has to be that ancestor.
+    expect(page).toContain("position: 'relative'")
+    expect(page).toContain("flex: '1 1 auto'")
+    expect(page).toContain('minHeight: 0')
+  })
 })
 
 describe('portal URL ↔ app fragment', () => {

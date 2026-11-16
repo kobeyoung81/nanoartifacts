@@ -76,7 +76,21 @@ export function LibraryPage({ ctx }: { ctx: PageContext }) {
   )
 
   return (
-    <div className="plugin-nanoartifacts plugin-page" data-nanoartifacts-page="library">
+    // The frame the library's absolutely-positioned layout needs. The portal gives
+    // a full-bleed route the box under its 40px header; without a positioned,
+    // height-carrying wrapper here, `.nz`'s `inset: 0` resolves against the
+    // viewport and the page covers that header.
+    <div
+      className="plugin-nanoartifacts plugin-page"
+      data-nanoartifacts-page="library"
+      style={{
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        flex: '1 1 auto',
+        minHeight: 0,
+      }}
+    >
       <App
         host={{
           token: ctx.token,
