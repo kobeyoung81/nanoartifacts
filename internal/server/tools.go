@@ -100,7 +100,7 @@ func toolDefinitions() []map[string]any {
 		},
 		{
 			"name":        "artifact_rename",
-			"description": "Rename a work. Pass node_id (the tree row) or artifact_id; the tree title and the document title are both updated.",
+			"description": "Rename a work. Pass node_id (the tree row) or artifact_id; the tree row of a filed work is found and renamed with the work itself.",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{

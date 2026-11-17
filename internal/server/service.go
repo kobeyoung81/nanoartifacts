@@ -136,10 +136,20 @@ func (s *Server) resolveDestination(ctx context.Context, owner string, req publi
 func (s *Server) finishPublish(ctx context.Context, owner string, dest destination, req publishRequest, hash string, size int64) (*store.Artifact, *store.Version, error) {
 	if dest.artifactID != "" {
 		version, artifact, err := s.Store.Publish(ctx, dest.artifactID, owner, hash, req.Note, size)
-		if err == nil {
-			s.Store.TouchNode(ctx, dest.nodeID)
+		if err != nil {
+			return artifact, version, err
 		}
-		return artifact, version, err
+		// A republish may carry a new title. Publish only appends the version, and
+		// the library shows the tree row, so a title that stops here reads as a
+		// rename that did nothing.
+		if title := strings.TrimSpace(req.Title); title != "" && title != artifact.Title {
+			if _, err := s.Store.RenameWork(ctx, dest.artifactID, title); err != nil {
+				return artifact, version, err
+			}
+			artifact.Title = title
+		}
+		s.Store.TouchNode(ctx, dest.nodeID)
+		return artifact, version, nil
 	}
 
 	artifact, version, err := s.Store.Create(ctx, owner, req.Title, req.Kind, hash, req.Note, size)
@@ -150,6 +160,14 @@ func (s *Server) finishPublish(ctx context.Context, owner string, dest destinati
 	if dest.nodeID != "" {
 		if err := s.Store.AttachArtifact(ctx, dest.nodeID, artifact.ID); err != nil {
 			return artifact, version, err
+		}
+		// An empty node keeps whatever name it was created with. The work was just
+		// created under this publish's title, so the tree row follows it; otherwise
+		// the directory would keep saying "untitled" for a named work.
+		if title := strings.TrimSpace(req.Title); title != "" {
+			if _, err := s.Store.RenameWork(ctx, artifact.ID, title); err != nil {
+				return artifact, version, err
+			}
 		}
 		return artifact, version, nil
 	}

@@ -384,13 +384,31 @@ func (s *Server) runTool(ctx context.Context, owner, name string, raw json.RawMe
 			return "", fmt.Errorf("title is required")
 		}
 
+		// The library shows nodes.title; the work's own title is metadata. A
+		// rename has to reach the tree row too, so resolve that row from whichever
+		// id the caller named — and refuse before writing, not after.
 		var node *store.Node
-		if strings.TrimSpace(args.NodeID) != "" {
+		switch {
+		case strings.TrimSpace(args.NodeID) != "":
 			found, err := s.Store.NodeByID(ctx, args.NodeID)
 			if err != nil {
 				return "", err
 			}
-			role, err := s.Store.Role(ctx, found.SpaceID, owner)
+			node = found
+		case strings.TrimSpace(args.ArtifactID) != "":
+			found, err := s.Store.NodeForArtifact(ctx, args.ArtifactID)
+			switch {
+			case errors.Is(err, store.ErrNotFound):
+				// A work that is not filed in any tree: nothing to rename there.
+			case err != nil:
+				return "", err
+			default:
+				node = found
+			}
+		}
+
+		if node != nil {
+			role, err := s.Store.Role(ctx, node.SpaceID, owner)
 			if err != nil {
 				return "", err
 			}
@@ -398,7 +416,6 @@ func (s *Server) runTool(ctx context.Context, owner, name string, raw json.RawMe
 			if role != store.RoleOwner && role != store.RoleEditor {
 				return "", store.ErrNotFound
 			}
-			node = found
 		}
 
 		artifactID := strings.TrimSpace(args.ArtifactID)
@@ -409,6 +426,7 @@ func (s *Server) runTool(ctx context.Context, owner, name string, raw json.RawMe
 			return "", fmt.Errorf("node_id or artifact_id is required")
 		}
 
+		treeUpdated := false
 		if artifactID != "" {
 			a, err := s.Store.Get(ctx, artifactID)
 			if err != nil {
@@ -419,20 +437,29 @@ func (s *Server) runTool(ctx context.Context, owner, name string, raw json.RawMe
 			if node == nil && a.OwnerUserID != owner {
 				return "", store.ErrNotFound
 			}
-			if err := s.Store.RenameArtifact(ctx, artifactID, title); err != nil {
+			nodes, err := s.Store.RenameWork(ctx, artifactID, title)
+			if err != nil {
 				return "", err
 			}
+			treeUpdated = nodes > 0
 		}
-		if node != nil {
+		// A node that holds no work yet (an empty document) is a tree-only edit.
+		if node != nil && node.ArtifactID == "" {
 			if _, err := s.Store.UpdateNode(ctx, node.ID, &title, nil); err != nil {
 				return "", err
 			}
+			treeUpdated = true
 		}
 
+		nodeID := ""
+		if node != nil {
+			nodeID = node.ID
+		}
 		out, _ := json.Marshal(map[string]any{
-			"artifact_id": artifactID,
-			"node_id":     args.NodeID,
-			"title":       title,
+			"artifact_id":  artifactID,
+			"node_id":      nodeID,
+			"title":        title,
+			"tree_updated": treeUpdated,
 		})
 		return string(out), nil
 

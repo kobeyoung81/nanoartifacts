@@ -398,27 +398,43 @@ func (s *Store) DuplicateArtifact(ctx context.Context, artifactID, newOwner, tit
 	return a, nil
 }
 
-// RenameArtifact changes the title shown on the work itself. The tree keeps its
-// own title (nodes.title); one request writes both, so a rename never leaves the
-// document header disagreeing with the tree.
-func (s *Store) RenameArtifact(ctx context.Context, artifactID, title string) error {
+// RenameWork sets the work's title and the title of every live tree node that
+// holds it, and returns how many nodes moved.
+//
+// A document's name is shown from nodes.title (the sidebar, the tree and the
+// document header all read it); artifacts.title is metadata. Writing only the
+// artifact row therefore looks like a rename that changed nothing in the
+// library, which is exactly what artifact_rename used to do when it was handed
+// an artifact id. Both rows belong to this store, so both are written here and
+// every caller keeps them in step.
+func (s *Store) RenameWork(ctx context.Context, artifactID, title string) (int64, error) {
 	trimmed := strings.TrimSpace(title)
 	if trimmed == "" {
-		return fmt.Errorf("%w: title is required", ErrInvalid)
+		return 0, fmt.Errorf("%w: title is required", ErrInvalid)
 	}
+	now := time.Now().UTC()
 	result, err := s.db.Collection(artifactsCollection).UpdateOne(ctx,
 		bson.D{{Key: "_id", Value: artifactID}, {Key: "deleted_at", Value: nil}},
 		bson.D{{Key: "$set", Value: bson.D{
 			{Key: "title", Value: trimmed},
-			{Key: "updated_at", Value: time.Now().UTC()},
+			{Key: "updated_at", Value: now},
 		}}})
 	if err != nil {
-		return fmt.Errorf("rename artifact: %w", err)
+		return 0, fmt.Errorf("rename artifact: %w", err)
 	}
 	if result.MatchedCount == 0 {
-		return ErrNotFound
+		return 0, ErrNotFound
 	}
-	return nil
+	nodes, err := s.db.Collection(nodesCollection).UpdateMany(ctx,
+		bson.D{{Key: "artifact_id", Value: artifactID}, {Key: "deleted_at", Value: nil}},
+		bson.D{{Key: "$set", Value: bson.D{
+			{Key: "title", Value: trimmed},
+			{Key: "updated_at", Value: now},
+		}}})
+	if err != nil {
+		return 0, fmt.Errorf("rename artifact nodes: %w", err)
+	}
+	return nodes.ModifiedCount, nil
 }
 
 // SoftDelete hides the artifact from every list and lookup. The rows stay so an

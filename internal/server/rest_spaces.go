@@ -361,7 +361,7 @@ func (s *Server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
 	// body belongs to. Renaming from the tree has to move both or the header
 	// keeps the old name.
 	if body.Title != nil && node.ArtifactID != "" && updated.Title != node.Title {
-		if err := s.Store.RenameArtifact(r.Context(), node.ArtifactID, updated.Title); err != nil {
+		if _, err := s.Store.RenameWork(r.Context(), node.ArtifactID, updated.Title); err != nil {
 			writeStoreError(w, err)
 			return
 		}
