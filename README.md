@@ -142,8 +142,11 @@ and a preview open for hours does not turn into a 403. MCP requests carry the sh
 `artifact_publish` · `artifact_list` · `space_list` · `tree_get` · `artifact_get` ·
 `artifact_rename` · `artifact_grant` · `artifact_delete`
 
-Registered in the bus by `nanobus mcp seed` as `scope=platform`, opt-in per agent
-type (a new server must not silently widen what an agent can do).
+Registered in the catalogue by `nanoadmin mcp seed` as `scope=platform`, opt-in
+per agent type (a new server must not silently widen what an agent can do). The
+seeder matches an existing platform row **by endpoint as well as by id**: a
+deployment that configured this server by hand under another name keeps its row,
+and a deploy does not add a second copy of the same endpoint.
 
 ### Publishing a document without putting it in the conversation
 
@@ -188,8 +191,9 @@ nanoartifacts version
 |---|---|---|
 | `NANOARTIFACTS_MONGO_URI` | yes | its own database; the URI must name it |
 | `NANOARTIFACTS_SESSION_SECRET` | yes | HMAC key for the preview-session cookie |
-| `NANOSEC_BUS_URL` | yes | identity lookups |
-| `NANOSEC_BUS_INTERNAL_TOKEN` | yes | bus internal REST + MCP auth |
+| `NANOSEC_PORTAL_URL` | yes | identity lookups: the portal owns the agent rows |
+| `NANOAUTH_INTERNAL_URL` | yes | identity lookups: nanoauth owns the accounts |
+| `NANOSEC_BUS_INTERNAL_TOKEN` | yes | shared internal token: MCP callers and those lookups |
 | `NANOAUTH_JWKS_URL` | yes | token verification |
 | `NANOARTIFACTS_QUOTA_BYTES` | no | default 2 GiB per user |
 | `NANOARTIFACTS_WEB_DIR` | no | built SPA; default `web/dist` |

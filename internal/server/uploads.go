@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gitee.com/kobeyoung81/nanoartifacts/internal/blobstore"
+	"gitee.com/kobeyoung81/nanoartifacts/internal/identity"
 	"gitee.com/kobeyoung81/nanoartifacts/internal/store"
 )
 
@@ -44,8 +45,15 @@ func (s *Server) agentOf(w http.ResponseWriter, r *http.Request) (string, bool) 
 	}
 	owner, err := s.Identity.OwnerOfAgent(r.Context(), agentID)
 	if err != nil {
-		slog.Warn("mcp identity lookup failed", "agent", agentID, "error", err)
-		writeError(w, http.StatusForbidden, "unknown agent")
+		if errors.Is(err, identity.ErrUnknownAgent) {
+			slog.Warn("mcp identity lookup: no such agent", "agent", agentID, "error", err)
+			writeError(w, http.StatusForbidden, "unknown agent")
+			return "", false
+		}
+		// The portal owns the agent rows; when it cannot answer, the failure is
+		// this platform's, not the caller's.
+		slog.Error("mcp identity lookup failed", "agent", agentID, "error", err)
+		writeError(w, http.StatusBadGateway, "agent directory unavailable")
 		return "", false
 	}
 	return owner, true

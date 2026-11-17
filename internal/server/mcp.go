@@ -3,12 +3,14 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"gitee.com/kobeyoung81/nanoartifacts/internal/identity"
 	"gitee.com/kobeyoung81/nanoartifacts/internal/store"
 )
 
@@ -56,8 +58,18 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		}
 		owner, err := s.Identity.OwnerOfAgent(r.Context(), agentID)
 		if err != nil {
-			slog.Warn("mcp identity lookup failed", "agent", agentID, "error", err)
-			writeRPCError(w, req.ID, -32000, "unknown agent")
+			if errors.Is(err, identity.ErrUnknownAgent) {
+				// A stale container or a stale tab: the caller's mistake, and the
+				// answer says so.
+				slog.Warn("mcp identity lookup: no such agent", "agent", agentID, "error", err)
+				writeRPCError(w, req.ID, -32000, "unknown agent")
+				return
+			}
+			// The owner of the agent rows could not answer. Reporting that as
+			// "unknown agent" is what kept a renamed surface invisible: the
+			// platform is unwell, not the caller.
+			slog.Error("mcp identity lookup failed", "agent", agentID, "error", err)
+			writeRPCError(w, req.ID, -32000, "agent directory unavailable")
 			return
 		}
 		s.callTool(w, r.Context(), owner, req)

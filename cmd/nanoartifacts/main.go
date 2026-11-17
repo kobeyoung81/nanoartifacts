@@ -122,11 +122,15 @@ func serve() error {
 	}
 
 	srv := &server.Server{
-		Store:    st,
-		Blobs:    blobstore.New(st.DB()),
-		Signer:   sign.New(cfg.SessionSecret, 8*time.Hour),
-		Users:    auth.New(cfg.JWKSURL, cfg.BusToken),
-		Identity: identity.New(cfg.BusURL, cfg.BusToken),
+		Store:  st,
+		Blobs:  blobstore.New(st.DB()),
+		Signer: sign.New(cfg.SessionSecret, 8*time.Hour),
+		Users:  auth.New(cfg.JWKSURL, cfg.BusToken),
+		Identity: identity.New(identity.Options{
+			PortalURL: cfg.PortalURL,
+			AuthURL:   cfg.AuthURL,
+			Token:     cfg.BusToken,
+		}),
 		Quota:    cfg.QuotaBytes,
 		BusToken: cfg.BusToken,
 		Version:  version,

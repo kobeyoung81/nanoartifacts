@@ -18,8 +18,9 @@ type Config struct {
 	MongoURI      string // its own database; the only database this service touches
 	SessionSecret string // HMAC key for the preview-session cookie
 	QuotaBytes    int64  // per-user ceiling, counted after content dedupe
-	BusURL        string // identity lookups (agent -> owner, user display names)
-	BusToken      string // shared internal token for the bus's REST surface
+	PortalURL     string // identity lookups: the portal owns the agent rows
+	AuthURL       string // identity lookups: nanoauth owns the accounts
+	BusToken      string // shared internal token: MCP callers and the lookups above
 	JWKSURL       string // nanoauth's key set, read directly (no proxy)
 	WebDir        string // built SPA; empty means API only
 	// CookiePath scopes the preview cookie. The default is "/" because the
@@ -46,7 +47,8 @@ func Load() (*Config, error) {
 	}{
 		{"NANOARTIFACTS_MONGO_URI", &c.MongoURI},
 		{"NANOARTIFACTS_SESSION_SECRET", &c.SessionSecret},
-		{"NANOSEC_BUS_URL", &c.BusURL},
+		{"NANOSEC_PORTAL_URL", &c.PortalURL},
+		{"NANOAUTH_INTERNAL_URL", &c.AuthURL},
 		{"NANOSEC_BUS_INTERNAL_TOKEN", &c.BusToken},
 		{"NANOAUTH_JWKS_URL", &c.JWKSURL},
 	} {

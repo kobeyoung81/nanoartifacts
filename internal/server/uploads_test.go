@@ -19,9 +19,14 @@ import (
 	"gitee.com/kobeyoung81/nanoartifacts/internal/store"
 )
 
-// uploadServer wires a real store and a fake bus, so an agent header resolves to
-// an owner exactly as it does in production. The bytes path is what these tests
-// exercise: upload, claim the handle, publish, download.
+// uploadServer wires a real store and a fake portal, so an agent header resolves
+// to an owner exactly as it does in production. The bytes path is what these
+// tests exercise: upload, claim the handle, publish, download.
+//
+// The fake answers the portal's internal agent read, which is where that row
+// lives. It used to answer a bus path instead, so the fixture and the
+// implementation drifted away from the platform together and every test passed
+// while the service could not resolve a single agent.
 func uploadServer(t *testing.T) (*Server, string) {
 	t.Helper()
 	uri := os.Getenv("NANOARTIFACTS_MONGO_URI")
@@ -42,23 +47,31 @@ func uploadServer(t *testing.T) (*Server, string) {
 	}
 	t.Cleanup(func() { _ = st.Close(context.Background()) })
 
-	bus := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := strings.TrimPrefix(r.URL.Path, "/api/v1/agents/")
+	portal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/internal/v1/agents/")
 		owner := map[string]string{"agent-1": "owner-1", "agent-2": "owner-2"}[id]
 		if owner == "" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"user_id": owner})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"agent": map[string]string{"id": id, "user_id": owner},
+		})
 	}))
-	t.Cleanup(bus.Close)
+	t.Cleanup(portal.Close)
+
+	// Accounts are nanoauth's; these tests publish, they never look one up.
+	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Errorf("nanoauth was asked about an account during an upload test")
+	}))
+	t.Cleanup(auth.Close)
 
 	return &Server{
 		Store:    st,
 		Blobs:    blobstore.New(st.DB()),
-		Identity: identity.New(bus.URL, "bus-token"),
+		Identity: identity.New(identity.Options{PortalURL: portal.URL, AuthURL: auth.URL, Token: "bus-token"}),
 		BusToken: "internal",
-	}, bus.URL
+	}, portal.URL
 }
 
 func uploadBody(t *testing.T, s *Server, agent, body string) (int, map[string]any) {

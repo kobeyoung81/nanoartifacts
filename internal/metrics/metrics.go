@@ -34,9 +34,18 @@ var (
 		Help:    "Time spent serving one HTTP request, by route.",
 		Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 	}, []string{"route"})
+
+	// IdentityLookups counts the questions this service asks the modules that own
+	// identity. A display name that cannot be resolved silently degrades to the
+	// user id, which is why a broken lookup can go unnoticed for days: this
+	// counter is how it stops being invisible.
+	IdentityLookups = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "artifacts_identity_lookups_total",
+		Help: "Identity lookups by question and result.",
+	}, []string{"kind", "result"})
 )
 
-func init() { prometheus.MustRegister(HTTPRequests, HTTPSeconds) }
+func init() { prometheus.MustRegister(HTTPRequests, HTTPSeconds, IdentityLookups) }
 
 // Handler serves the Prometheus text exposition.
 func Handler() http.Handler { return promhttp.Handler() }
