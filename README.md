@@ -1,105 +1,61 @@
-# NanoArtifacts
+# nanoartifacts
 
-The platform's work library: agents publish self-contained HTML documents over
-MCP, users browse and share them in the portal.
+The work library: agents publish self-contained HTML documents, and people browse,
+share and version them.
 
-## What it owns
+It is one of the eight first-class services. It owns the `artifacts_` prefix, its
+own front end, and an MCP endpoint of its own.
 
-- **Its own collection prefix** (`artifacts_`) in the platform database
-  `nanosec`, reached through `NANOARTIFACTS_MONGO_URI`. Nothing outside this
-  service writes that prefix, and this service reads nothing outside it —
-  identity and agent ownership are asked from the bus over HTTP.
-- **Metadata**: `artifacts`, `artifacts_versions`, `artifacts_grants`,
-  `artifacts_spaces`, `artifacts_nodes`, `artifacts_uploads`.
-- **Bodies**: a GridFS-compatible pair (`artifacts_fs.files` /
-  `artifacts_fs.chunks`, 255 KiB chunks) written directly, with the content's
-  sha256 as the file id. Publishing identical bytes twice therefore stores and
-  charges them once.
+## What it is
 
-## Why the ids look the way they do
+- **Publish from a conversation.** An agent writes a report, a dashboard or a small
+  app and publishes it over MCP without pasting the document into the chat.
+- **Spaces and a tree.** Folders, documents and apps in a hierarchy, with access
+  granted per space or per artifact.
+- **Versions that do not grow.** Identical bytes are stored once and charged once;
+  publishing the same page twice costs one copy.
+- **Two surfaces, one code base.** A full page at `/artifacts` and two panels inside
+  the console's workbench.
+- **Anything the browser can render.** Each version is served in a sandboxed frame
+  with a preview cookie, so a link keeps working in a new tab.
 
-`artifacts_fs.files._id` is the sha256 of the body. That is what makes dedupe free and a
-publish idempotent. Chunk documents use `<hash>:<n>` as `_id` so no BSON
-ObjectID has to be generated for content that is already immutable.
+## Where it sits
 
-## Layout and invariants
-
-- Bodies live in `artifacts_fs.chunks`, keyed by `files_id = sha256`; there is no separate
-  sharded directory on disk.
-
-- Blob first, version row second: a crash in between leaves an unreferenced
-  body, which `gc` removes after an hour. The reverse order would leave a
-  version whose content cannot be read.
-- `artifacts_fs.files` is written last during an upload, so a reader never sees half a
-  document.
-- Deleting is a soft delete (`deleted_at`). The UI offers no recycle bin and
-  promises no recovery; an operator can restore by clearing the field.
-- `gc` also removes chunks whose file document never appeared (an interrupted
-  upload).
-
-## Where it lives
-
-| Path | Owner | Notes |
-|---|---|---|
-| `/artifacts`, `/artifacts?work=<id>` | the portal | shell + frame; this is the URL people share |
-| `/nanoartifacts/` | this service | the framed app, its assets and its API |
-| `/nanoartifacts/api/v1/…` | this service | proxied by the portal, prefix stripped |
-
-The two prefixes are deliberately different. When they were both `/artifacts`,
-any trailing-slash normalisation in a proxy sent a portal URL to the service —
-a new tab then opened without the portal's chrome.
-
-## As a portal plugin
-
-The library also ships as a Module Federation remote, so the portal's workbench
-hosts it as two panels — 作品库 (the space switcher and the tree, with the node's
-details as a second full view of the same panel) and 文档 (the body) — instead of
-a page.
-
-| Path | What |
+| | |
 |---|---|
-| `/nanoartifacts/plugin.json` | the plugin manifest: contract version, remote entry, panel list |
-| `/nanoartifacts/plugins/nanoartifacts/remoteEntry.js` | the federation remote (`./panels` → `LibraryPanel`, `DocumentPanel`) |
-| `/nanoartifacts/plugins/nanoartifacts/assets/*` | the panel bundle (hashed, immutable) |
+| Collections | `artifacts_*`, plus the root collection `artifacts`; bodies in `artifacts_fs.files` / `.chunks` |
+| Port | `8080` in the network; reached through the console's nginx at `/nanoartifacts/` |
+| Paths | `/artifacts` (the shared link, served by the portal) and `/nanoartifacts/` (this service) |
+| Upstream | agents (MCP), browsers (JWT or the preview cookie) |
+| Reads from | `nanoauth` (accounts) and `nanoportal` (who owns an agent) — never their collections |
 
-Two build passes share one source: `vite build` produces the standalone app,
-`vite build --config vite.config.remote.ts` produces the remote. The remote build
+## Quick start
 
-- scopes every stylesheet rule to `.plugin-nanoartifacts` and drops this app's
-  page-level resets (`:root`, `.dark`, `body`) — the palette is the shell's;
-- takes React from the host (`shared: { import: false }`), so a panel and the
-  shell run one copy; two would break hooks and context. The check is
-  `grep -rl "Minified React error" dist/plugins/nanoartifacts/assets` returning
-  nothing — with a plain `{ singleton: true }` the build embeds a fallback copy
-  and the marker appears, which is what makes the check falsifiable;
-- keeps the standalone app out of the bundle (the HTML entry is an empty
-  document), so `remoteEntry.js` only carries the panels and the federation
-  runtime.
+```bash
+go build ./cmd/nanoartifacts
+NANOARTIFACTS_MONGO_URI="mongodb://localhost:27017/nanosec" \
+NANOARTIFACTS_SESSION_SECRET="$(openssl rand -hex 32)" \
+NANOAUTH_JWKS_URL="http://localhost:14401/auth/v1/.well-known/jwks" \
+NANOSEC_PORTAL_URL="http://localhost:14403" \
+NANOAUTH_INTERNAL_URL="http://localhost:14401" \
+NANOSEC_BUS_INTERNAL_TOKEN="…" \
+  ./nanoartifacts serve
 
-Identity, language and route arrive as props from the shell. Inside the remote,
-both panels share one module-level route store, so selecting a node in the tree
-opens its document in the other panel. The full page (`/artifacts`) keeps the
-hash router and is unaffected.
+./nanoartifacts migrate up   # the embedded manifests
+```
 
-The panel and the full page are two surfaces of one app, laid out differently:
+## Configuration
 
-- **page**: three columns (tree / document / details), resizable, details open by
-  default; the ⋯ menu toggles the detail column.
-- **panel**: one view at a time. The tree fills the panel; ⋯ → details switches
-  the whole panel to the versions/sharing view, and “← 返回作品库” comes back. No
-  column, no resize grip, no width animation — the panel is narrow and one screen
-  at a time is the honest layout for it.
-
-The UI is split by view (`web/src/library/`): `SidebarView`, `DetailView`,
-`DocumentView`, `dialogs`, `tree` and the shared `model` helpers. `app.tsx` is the
-page shell plus the state/composition both surfaces use; a panel entry names the
-view it wants (`panelView`), and the document panel therefore renders the body
-and nothing else. The panel's height chain is host div → `.plugin-nanoartifacts`
-→ `.panel-root` → `.panel-view`; every link holds a height because a missing one
-makes `height: 100%` resolve against `auto` and collapses an iframe to its 150px
-default. Panels carry the page's own 13px type baseline on
-`.panel-view`, because the `body`/`.nz` rules that used to supply it are not part
-of a panel.
+| Variable | Required | Meaning |
+|---|---|---|
+| `NANOARTIFACTS_MONGO_URI` | yes | the platform database; the URI must name it |
+| `NANOARTIFACTS_SESSION_SECRET` | yes | HMAC key for the preview cookie |
+| `NANOSEC_PORTAL_URL` | yes | agent ownership |
+| `NANOAUTH_INTERNAL_URL` | yes | account lookups for the share dialog |
+| `NANOAUTH_JWKS_URL` | yes | token verification |
+| `NANOSEC_BUS_INTERNAL_TOKEN` | yes | MCP callers and the two lookups above |
+| `NANOARTIFACTS_QUOTA_BYTES` | no | per-user ceiling, default 2 GiB |
+| `NANOARTIFACTS_WEB_DIR`, `NANOARTIFACTS_ADDR`, `NANOARTIFACTS_COOKIE_PATH` | no | built SPA, listen address, cookie scope |
 
 ## HTTP
 
@@ -109,105 +65,66 @@ of a panel.
 | GET | `/api/v1/artifacts?scope=owned\|shared&q=&kind=` | the caller's JWT decides visibility |
 | POST | `/api/v1/artifacts` | publish (`html`, `title`, `kind`, optional `artifact_id`) |
 | GET | `/api/v1/artifacts/{id}` | metadata + versions + grants |
-| POST | `/api/v1/session` | exchanges the JWT for the preview cookie (`HttpOnly`, `SameSite=Lax`) |
-| GET | `/api/v1/artifacts/{id}/versions/{seq}/raw?download=1` | session cookie (or bearer); re-checks permissions; streams with `CSP: sandbox allow-scripts` |
+| POST | `/api/v1/session` | exchange the JWT for the preview cookie |
+| GET | `/api/v1/artifacts/{id}/versions/{seq}/raw?download=1` | cookie or bearer; re-checks permission on every load |
 | POST | `/api/v1/artifacts/{id}/rollback` | `{"seq": n}`; history is kept |
 | POST/DELETE | `/api/v1/artifacts/{id}/grants[/{userID}]` | owner only |
 | DELETE | `/api/v1/artifacts/{id}` | soft delete |
-| GET | `/api/v1/users?email=` | account lookup for the share dialog |
-| POST | `/mcp` | MCP, agent-only |
-| POST | `/mcp/blobs` | agent-only: accepts a body out of band, answers a short-lived `upload_id` |
-| GET | `/mcp/artifacts/{id}/versions/{seq}/raw` | agent-only content read, for a download that should land in a workspace |
-
-Every user route accepts either credential:
-
-- the platform's RS256 JWT (`Authorization: Bearer …`, validated against
-  nanoauth's JWKS), or
-- the `nw_artifacts` session cookie the SPA mints from that JWT.
-
-The cookie is what makes a **new tab** work. Ctrl+click, middle-click and a
-pasted link all land on this app with no parent frame to hand over a token, so
-the page asks `GET /api/v1/session` who it is and carries on. Cookie-
-authenticated writes additionally require the request to be same-origin
-(`Sec-Fetch-Site` / `Origin`); cookie minting itself stays bearer-only so a
-cookie cannot renew forever.
-
-Content is read through the same cookie on `/versions/{seq}/raw`, and the
-permission check runs on every load: revoking a share takes effect immediately,
-and a preview open for hours does not turn into a 403. MCP requests carry the shared internal token
-**and** `X-Nanowork-Agent-ID`; the header is what maps a call to its owner.
+| POST | `/mcp`, `/mcp/blobs` | agent-only: publish inline or by handle |
 
 ## MCP tools
 
 `artifact_publish` · `artifact_list` · `space_list` · `tree_get` · `artifact_get` ·
 `artifact_rename` · `artifact_grant` · `artifact_delete`
 
-Registered in the catalogue by `nanoadmin mcp seed` as `scope=platform`, opt-in
-per agent type (a new server must not silently widen what an agent can do). The
-seeder matches an existing platform row **by endpoint as well as by id**: a
-deployment that configured this server by hand under another name keeps its row,
-and a deploy does not add a second copy of the same endpoint.
+Seeded by `nanoadmin mcp seed` as `scope=platform`, opt-in per agent type — a new
+server must not silently widen what an agent can do.
 
-### Publishing a document without putting it in the conversation
+**Publishing a large page.** JSON-RPC would make the model write the document twice:
+once as output, then again on every turn that replays the conversation. So the tool
+takes a path: the agent writes the file in its workspace, calls
+`artifact_publish(html_file: "artifacts/report.html")`, the runtime uploads it to
+`POST /mcp/blobs` and substitutes a handle the server claims once, within 15 minutes,
+for that owner only. Reading follows the same rule in reverse:
+`artifact_get(download_to: …)` answers with a descriptor instead of the body.
 
-JSON-RPC carries JSON values, so the original shape — the whole HTML document as
-the `html` argument — made the model write the page twice: once as output, then
-again on every later turn that replayed the conversation. A large page also runs
-into the provider's output limit, which truncates the tool call.
+## Design decisions
 
-Publishing therefore has a byte path beside the call:
+- **The id is the content's sha256.** Publishing identical bytes stores and charges
+  one copy; the version row is metadata, the body is shared.
+- **Blobs are written before the version row.** A crash leaves an orphan chunk that
+  `nanoartifacts gc` removes — never a version pointing at nothing.
+- **Delete is soft.** A row is marked, the body survives until the garbage collector
+  proves nothing references it.
+- **Two prefixes on purpose.** The page is `/artifacts` (portal), the app and its API
+  are `/nanoartifacts/` (this service). Trailing-slash normalisation in a proxy used
+  to send a portal URL into the service, which opened a new tab without the console.
+- **The preview cookie is what makes a link work.** Ctrl+click and pasted links have
+  no parent frame to hand over a token, so the page asks the session endpoint who it
+  is. Cookie minting stays bearer-only, so a cookie cannot renew itself forever.
+- **A panel is not a page.** The workbench hosts two panels from the same build
+  (federation remote, React taken from the host); the panel shows one view at a time,
+  because a narrow column is not the place for a three-column layout.
 
-1. the agent writes the page to a file in its workspace (`write`, `edit`);
-2. it calls `artifact_publish(html_file: "artifacts/report.html", …)`;
-3. the runtime uploads the file to `POST /mcp/blobs` and substitutes the handle
-   it gets back (`nanoartifacts://upload/<id>`) for the path, so the call the
-   server sees carries a URI, not a document;
-4. `artifact_publish` claims the handle — once, within 15 minutes, only for the
-   owner who uploaded it — and publishes the blob it already has.
+## Docs
 
-The tool schema declares this with `x-mcp-file` on `html_file`
-(`{"transferModes":["upload"],"uploadEndpoint":"/mcp/blobs"}`). The declaration is an instruction to the client,
-not the model: `nanosec` strips it before the schema reaches the provider and
-honours it in its MCP bridge. A client that does not understand it can still
-publish with the deprecated inline `html` argument.
+- [`docs/ARCHITECTURE.md`](https://gitee.com/kobeyoung81/nanosec/blob/master/docs/ARCHITECTURE.md) — the platform around this module
+- [`docs/DEPLOYMENT.md`](https://gitee.com/kobeyoung81/nanosec/blob/master/docs/DEPLOYMENT.md) — ports, the nginx mounts, operations
+- [`docs/README.md`](https://gitee.com/kobeyoung81/nanosec/blob/master/docs/README.md) — every document
 
-Reading follows the same rule in reverse: `artifact_get(download_to: "artifacts/report.html")`
-answers with a descriptor (`raw_path`, `size_bytes`, `content_hash`) instead of
-the body; the runtime fetches `GET /mcp/artifacts/{id}/versions/{seq}/raw`,
-verifies the hash and writes the file. `include_html` still inlines a small body.
+## Status
 
-## Commands
+Released as part of `v0.1.0`; the version of this module is pinned in the
+super-repo's `versions.lock`.
 
-```sh
-nanoartifacts serve          # HTTP + MCP + the built SPA
-nanoartifacts migrate up     # apply the embedded manifests
-nanoartifacts gc             # orphan chunks + unreferenced bodies
-nanoartifacts version
-```
+## Contributing and security
 
-## Environment
+[`CONTRIBUTING.md`](https://gitee.com/kobeyoung81/nanosec/blob/master/CONTRIBUTING.md)
+for setup and commit rules; report vulnerabilities privately through
+[`SECURITY.md`](https://gitee.com/kobeyoung81/nanosec/blob/master/SECURITY.md), never
+in a public issue.
 
-| Variable | Required | Meaning |
-|---|---|---|
-| `NANOARTIFACTS_MONGO_URI` | yes | its own database; the URI must name it |
-| `NANOARTIFACTS_SESSION_SECRET` | yes | HMAC key for the preview-session cookie |
-| `NANOSEC_PORTAL_URL` | yes | identity lookups: the portal owns the agent rows |
-| `NANOAUTH_INTERNAL_URL` | yes | identity lookups: nanoauth owns the accounts |
-| `NANOSEC_BUS_INTERNAL_TOKEN` | yes | shared internal token: MCP callers and those lookups |
-| `NANOAUTH_JWKS_URL` | yes | token verification |
-| `NANOARTIFACTS_QUOTA_BYTES` | no | default 2 GiB per user |
-| `NANOARTIFACTS_WEB_DIR` | no | built SPA; default `web/dist` |
-| `NANOARTIFACTS_ADDR` | no | default `:8080` |
-| `NANOARTIFACTS_COOKIE_PATH` | no | preview-cookie scope; default `/` (tighten to `/nanoartifacts/api` if desired) |
+## License
 
-## Development
-
-```sh
-go test ./...          # MongoDB-backed tests skip without NANOARTIFACTS_MONGO_URI
-go vet ./...
-cd web && npm test && npm run build
-```
-
-To run the storage tests against a real database, point
-`NANOARTIFACTS_MONGO_URI` at a throwaway database; the tests create and drop
-their own.
+[AGPL-3.0](./LICENSE). The name and logo are covered separately — see
+[`NOTICE`](./NOTICE).
