@@ -20,7 +20,7 @@ RUN go mod download
 COPY . .
 
 ARG VERSION=dev
-RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${VERSION}" -o /bin/nanoartifacts ./cmd/nanoartifacts
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /bin/nanoartifacts ./cmd/nanoartifacts
 
 FROM alpine:3.19
 
