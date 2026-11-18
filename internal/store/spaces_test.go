@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -127,18 +128,27 @@ func TestTreeCreateMoveAndCycle(t *testing.T) {
 	}
 }
 
-func TestDeleteNodeRemovesSubtree(t *testing.T) {
+// A folder is emptied before it is removed: deleting it with contents inside
+// would take rows the caller never looked at.
+func TestDeleteNodeRefusesANonEmptyFolder(t *testing.T) {
 	st := testStore(t)
 	ctx := context.Background()
 	space, _ := st.CreateSpace(ctx, "u1", "Team", "members")
 	root, _ := st.CreateNode(ctx, space.ID, "", "folder", "根", "u1", "")
-	child, _ := st.CreateNode(ctx, space.ID, root.ID, "document", "子页", "u1", "art-1")
+	child, _ := st.CreateNode(ctx, space.ID, root.ID, "document", "子页", "u1", "")
 
-	if err := st.DeleteNode(ctx, root.ID); err != nil {
-		t.Fatalf("delete: %v", err)
+	if _, err := st.DeleteNode(ctx, root.ID, "u1"); !errors.Is(err, ErrNotEmpty) {
+		t.Fatalf("delete non-empty folder = %v, want ErrNotEmpty", err)
 	}
-	if _, err := st.NodeByID(ctx, child.ID); err != ErrNotFound {
-		t.Fatalf("child survived: %v", err)
+	if _, err := st.NodeByID(ctx, root.ID); err != nil {
+		t.Fatalf("folder is gone after a refused delete: %v", err)
+	}
+
+	if _, err := st.DeleteNode(ctx, child.ID, "u1"); err != nil {
+		t.Fatalf("delete child: %v", err)
+	}
+	if _, err := st.DeleteNode(ctx, root.ID, "u1"); err != nil {
+		t.Fatalf("delete empty folder: %v", err)
 	}
 	nodes, _ := st.ListNodes(ctx, space.ID)
 	if len(nodes) != 0 {

@@ -128,13 +128,72 @@ func toolDefinitions() []map[string]any {
 		},
 		{
 			"name":        "artifact_delete",
-			"description": "Remove a work you own from the library. Other users lose access immediately.",
+			"description": "Remove a work you own from the library: the work and the tree rows that show it go together, so no row is left opening onto a missing page. Other users lose access immediately.",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"artifact_id": map[string]any{"type": "string"},
 				},
 				"required":             []string{"artifact_id"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			"name": "folder_create",
+			"description": "Create a folder in a space's tree, at the root or under another folder. " +
+				"Folders are containers: documents get their own row when published (pass space_id and parent_id to artifact_publish).",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"space_id":  map[string]any{"type": "string", "description": "Space to create the folder in."},
+					"parent_id": map[string]any{"type": "string", "description": "Folder to create it under; defaults to the space root."},
+					"title":     map[string]any{"type": "string"},
+				},
+				"required":             []string{"space_id", "title"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			"name": "node_move",
+			"description": "Move a document or folder inside the tree, including into another space the caller can edit. " +
+				"A folder takes everything under it. before_id places the node just before that sibling; omit it to append.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"node_id":     map[string]any{"type": "string", "description": "The tree row to move."},
+					"artifact_id": map[string]any{"type": "string", "description": "Alternative to node_id: the work whose row should move."},
+					"space_id":    map[string]any{"type": "string", "description": "Destination space; defaults to the node's current space."},
+					"parent_id":   map[string]any{"type": "string", "description": "Destination folder; empty means the space root."},
+					"before_id":   map[string]any{"type": "string", "description": "Optional sibling to place the node before."},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			"name": "node_copy",
+			"description": "Copy a document or folder (with everything under it) into a space the caller can edit. " +
+				"Each document copy gets its own work row; the bytes are shared by content hash, so a copy costs no extra storage.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"node_id":     map[string]any{"type": "string", "description": "The tree row to copy."},
+					"artifact_id": map[string]any{"type": "string", "description": "Alternative to node_id: the work whose row should be copied."},
+					"space_id":    map[string]any{"type": "string", "description": "Destination space; defaults to the node's current space."},
+					"parent_id":   map[string]any{"type": "string", "description": "Destination folder; empty means the space root."},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			"name": "node_delete",
+			"description": "Delete one tree row. A folder must be empty first: a non-empty folder is refused rather than removed with its contents. " +
+				"Deleting a document removes its work too when no other row shows it and the caller owns it.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"node_id":     map[string]any{"type": "string", "description": "The tree row to delete."},
+					"artifact_id": map[string]any{"type": "string", "description": "Alternative to node_id: the work whose row should be deleted."},
+				},
 				"additionalProperties": false,
 			},
 		},

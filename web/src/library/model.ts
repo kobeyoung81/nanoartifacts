@@ -6,6 +6,17 @@ import type { Node } from '../api'
 
 export type Toast = { id: number; text: string }
 
+// A folder is removed only when it is empty: the same rule the server enforces.
+// The row menu asks this before offering the action, so the refusal is not the
+// first time the user hears about it.
+export function hasChildren(nodes: Node[], id: string): boolean {
+  return nodes.some((node) => node.parent_id === id)
+}
+
+export function canDeleteNode(nodes: Node[], node: Node): boolean {
+  return node.kind !== 'folder' || !hasChildren(nodes, node.id)
+}
+
 export function nodeKindLabel(node: Node, zh: boolean): string {
   if (node.kind === 'folder') return zh ? '目录' : 'Folder'
   if (node.kind === 'app') return zh ? '轻应用' : 'App'

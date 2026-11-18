@@ -375,7 +375,7 @@ func (s *Server) handleDeleteNode(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	if err := s.Store.DeleteNode(r.Context(), node.ID); err != nil {
+	if _, err := s.Store.DeleteNode(r.Context(), node.ID, userOf(r)); err != nil {
 		writeStoreError(w, err)
 		return
 	}

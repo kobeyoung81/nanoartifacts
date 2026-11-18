@@ -48,9 +48,10 @@ func TestMCPProbeNeedsNoAgentIdentity(t *testing.T) {
 		t.Fatalf("decode tools/list: %v", err)
 	}
 	// artifact_publish, artifact_list, space_list, tree_get, artifact_get,
-	// artifact_rename, artifact_grant, artifact_delete.
-	if len(listed.Result.Tools) != 8 {
-		t.Fatalf("tools = %d, want 8", len(listed.Result.Tools))
+	// artifact_rename, artifact_grant, artifact_delete, folder_create,
+	// node_move, node_copy, node_delete.
+	if len(listed.Result.Tools) != 12 {
+		t.Fatalf("tools = %d, want 12", len(listed.Result.Tools))
 	}
 
 	// Calling a tool is where identity matters.

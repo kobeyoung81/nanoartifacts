@@ -385,37 +385,11 @@ func (s *Server) runTool(ctx context.Context, owner, name string, raw json.RawMe
 		}
 
 		// The library shows nodes.title; the work's own title is metadata. A
-		// rename has to reach the tree row too, so resolve that row from whichever
-		// id the caller named — and refuse before writing, not after.
-		var node *store.Node
-		switch {
-		case strings.TrimSpace(args.NodeID) != "":
-			found, err := s.Store.NodeByID(ctx, args.NodeID)
-			if err != nil {
-				return "", err
-			}
-			node = found
-		case strings.TrimSpace(args.ArtifactID) != "":
-			found, err := s.Store.NodeForArtifact(ctx, args.ArtifactID)
-			switch {
-			case errors.Is(err, store.ErrNotFound):
-				// A work that is not filed in any tree: nothing to rename there.
-			case err != nil:
-				return "", err
-			default:
-				node = found
-			}
-		}
-
-		if node != nil {
-			role, err := s.Store.Role(ctx, node.SpaceID, owner)
-			if err != nil {
-				return "", err
-			}
-			// Renaming is an edit: a viewer of the space may read but not rename.
-			if role != store.RoleOwner && role != store.RoleEditor {
-				return "", store.ErrNotFound
-			}
+		// rename has to reach the tree row too, so the row is resolved from
+		// whichever id the caller named — and refused before writing, not after.
+		node, err := s.editableNode(ctx, owner, args.NodeID, args.ArtifactID)
+		if err != nil {
+			return "", err
 		}
 
 		artifactID := strings.TrimSpace(args.ArtifactID)
@@ -495,12 +469,236 @@ func (s *Server) runTool(ctx context.Context, owner, name string, raw json.RawMe
 		if err := json.Unmarshal(raw, &args); err != nil {
 			return "", fmt.Errorf("invalid arguments: %w", err)
 		}
-		if err := s.Store.SoftDelete(ctx, args.ArtifactID, owner); err != nil {
+		artifactID := strings.TrimSpace(args.ArtifactID)
+		if artifactID == "" {
+			return "", fmt.Errorf("artifact_id is required")
+		}
+		a, err := s.Store.Get(ctx, artifactID)
+		if err != nil {
 			return "", err
 		}
-		return `{"deleted":true}`, nil
+		if a.OwnerUserID != owner {
+			return "", store.ErrNotFound
+		}
+		// Removing the work also removes the rows that show it, which is an edit
+		// of each of those spaces.
+		nodes, err := s.Store.NodesForArtifact(ctx, artifactID)
+		if err != nil {
+			return "", err
+		}
+		for _, node := range nodes {
+			role, err := s.Store.Role(ctx, node.SpaceID, owner)
+			if err != nil {
+				return "", err
+			}
+			if role != store.RoleOwner && role != store.RoleEditor {
+				return "", store.ErrNotFound
+			}
+		}
+		result, err := s.Store.DeleteWork(ctx, artifactID, owner)
+		if err != nil {
+			return "", err
+		}
+		out, _ := json.Marshal(map[string]any{
+			"deleted":       true,
+			"artifact_id":   artifactID,
+			"nodes_deleted": result.NodesDeleted,
+		})
+		return string(out), nil
+
+	case "folder_create":
+		var args struct {
+			SpaceID  string `json:"space_id"`
+			ParentID string `json:"parent_id"`
+			Title    string `json:"title"`
+		}
+		if err := json.Unmarshal(raw, &args); err != nil {
+			return "", fmt.Errorf("invalid arguments: %w", err)
+		}
+		title := strings.TrimSpace(args.Title)
+		if title == "" {
+			return "", fmt.Errorf("title is required")
+		}
+		spaceID := strings.TrimSpace(args.SpaceID)
+		if spaceID == "" {
+			return "", fmt.Errorf("space_id is required")
+		}
+		if err := s.requireSpaceEditor(ctx, owner, spaceID); err != nil {
+			return "", err
+		}
+		node, err := s.Store.CreateNode(ctx, spaceID, strings.TrimSpace(args.ParentID), "folder", title, owner, "")
+		if err != nil {
+			return "", err
+		}
+		out, _ := json.Marshal(map[string]any{
+			"node_id":   node.ID,
+			"space_id":  node.SpaceID,
+			"parent_id": node.ParentID,
+			"title":     node.Title,
+		})
+		return string(out), nil
+
+	case "node_move":
+		var args struct {
+			NodeID     string `json:"node_id"`
+			ArtifactID string `json:"artifact_id"`
+			SpaceID    string `json:"space_id"`
+			ParentID   string `json:"parent_id"`
+			BeforeID   string `json:"before_id"`
+		}
+		if err := json.Unmarshal(raw, &args); err != nil {
+			return "", fmt.Errorf("invalid arguments: %w", err)
+		}
+		node, err := s.editableNode(ctx, owner, args.NodeID, args.ArtifactID)
+		if err != nil {
+			return "", err
+		}
+		if node == nil {
+			return "", store.ErrNotFound
+		}
+		targetSpace := strings.TrimSpace(args.SpaceID)
+		if targetSpace == "" {
+			targetSpace = node.SpaceID
+		}
+		if targetSpace != node.SpaceID {
+			if err := s.requireSpaceEditor(ctx, owner, targetSpace); err != nil {
+				return "", err
+			}
+		}
+		moved, err := s.Store.MoveNode(ctx, node.ID, targetSpace,
+			strings.TrimSpace(args.ParentID), strings.TrimSpace(args.BeforeID))
+		if err != nil {
+			return "", err
+		}
+		out, _ := json.Marshal(map[string]any{
+			"node_id":   moved.ID,
+			"space_id":  moved.SpaceID,
+			"parent_id": moved.ParentID,
+			"position":  moved.Position,
+			"title":     moved.Title,
+		})
+		return string(out), nil
+
+	case "node_copy":
+		var args struct {
+			NodeID     string `json:"node_id"`
+			ArtifactID string `json:"artifact_id"`
+			SpaceID    string `json:"space_id"`
+			ParentID   string `json:"parent_id"`
+		}
+		if err := json.Unmarshal(raw, &args); err != nil {
+			return "", fmt.Errorf("invalid arguments: %w", err)
+		}
+		node, err := s.editableNode(ctx, owner, args.NodeID, args.ArtifactID)
+		if err != nil {
+			return "", err
+		}
+		if node == nil {
+			return "", store.ErrNotFound
+		}
+		targetSpace := strings.TrimSpace(args.SpaceID)
+		if targetSpace == "" {
+			targetSpace = node.SpaceID
+		}
+		if targetSpace != node.SpaceID {
+			if err := s.requireSpaceEditor(ctx, owner, targetSpace); err != nil {
+				return "", err
+			}
+		}
+		created, err := s.Store.CopySubtree(ctx, node.ID, targetSpace, strings.TrimSpace(args.ParentID), owner)
+		if err != nil {
+			return "", err
+		}
+		out, _ := json.Marshal(map[string]any{
+			"node_id":     created.ID,
+			"artifact_id": created.ArtifactID,
+			"space_id":    created.SpaceID,
+			"parent_id":   created.ParentID,
+			"title":       created.Title,
+		})
+		return string(out), nil
+
+	case "node_delete":
+		var args struct {
+			NodeID     string `json:"node_id"`
+			ArtifactID string `json:"artifact_id"`
+		}
+		if err := json.Unmarshal(raw, &args); err != nil {
+			return "", fmt.Errorf("invalid arguments: %w", err)
+		}
+		node, err := s.editableNode(ctx, owner, args.NodeID, args.ArtifactID)
+		if err != nil {
+			return "", err
+		}
+		if node == nil {
+			return "", store.ErrNotFound
+		}
+		result, err := s.Store.DeleteNode(ctx, node.ID, owner)
+		if err != nil {
+			return "", err
+		}
+		out, _ := json.Marshal(map[string]any{
+			"deleted":           true,
+			"node_id":           result.NodeID,
+			"artifacts_deleted": result.ArtifactsDeleted,
+			"artifacts_kept":    result.ArtifactsKept,
+		})
+		return string(out), nil
 	}
 	return "", fmt.Errorf("unknown tool %q", name)
+}
+
+// editableNode resolves the tree row a caller names — by node_id, or by the work
+// it shows — and checks that the caller may edit that space. A nil node with a
+// nil error means the work exists but is not filed in any tree.
+//
+// Every tree write goes through here so the rule (viewers read, editors write)
+// is stated once.
+func (s *Server) editableNode(ctx context.Context, owner, nodeID, artifactID string) (*store.Node, error) {
+	nodeID = strings.TrimSpace(nodeID)
+	artifactID = strings.TrimSpace(artifactID)
+	var node *store.Node
+	switch {
+	case nodeID != "":
+		found, err := s.Store.NodeByID(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		node = found
+	case artifactID != "":
+		found, err := s.Store.NodeForArtifact(ctx, artifactID)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			// A work that is not filed in any tree: nothing to rename, move or
+			// copy there.
+		case err != nil:
+			return nil, err
+		default:
+			node = found
+		}
+	}
+	if node == nil {
+		return nil, nil
+	}
+	if err := s.requireSpaceEditor(ctx, owner, node.SpaceID); err != nil {
+		return nil, err
+	}
+	return node, nil
+}
+
+// requireSpaceEditor refuses a write in a space the caller cannot edit.
+func (s *Server) requireSpaceEditor(ctx context.Context, owner, spaceID string) error {
+	role, err := s.Store.Role(ctx, spaceID, owner)
+	if err != nil {
+		return err
+	}
+	if role == "" {
+		return store.ErrNotFound
+	}
+	if role != store.RoleOwner && role != store.RoleEditor {
+		return store.ErrForbidden
+	}
+	return nil
 }
 
 func writeRPCResult(w http.ResponseWriter, id json.RawMessage, result any) {

@@ -68,7 +68,11 @@ NANOSEC_BUS_INTERNAL_TOKEN="…" \
 ## MCP 工具
 
 `artifact_publish` · `artifact_list` · `space_list` · `tree_get` · `artifact_get` ·
-`artifact_rename` · `artifact_grant` · `artifact_delete`
+`artifact_rename` · `artifact_grant` · `artifact_delete` ·
+`folder_create` · `node_move` · `node_copy` · `node_delete`
+
+`artifact_delete` 会连作品和展示它的目录行一起删；`node_delete` 只删一行，目录非空时拒绝；
+文档的作品在“没有别的行展示它、且属于调用者”时一并删除。
 
 由 `nanoadmin mcp seed` 以 `scope=platform` 播种，按智能体类型逐条开启 ——
 新服务不能悄悄扩大智能体能力。

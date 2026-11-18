@@ -1083,6 +1083,13 @@ button {
   text-decoration: none;
 }
 
+.nz-rowmenu-pop button:disabled,
+.nz-rowmenu-pop button:disabled:hover {
+  opacity: 0.45;
+  background: none;
+  cursor: not-allowed;
+}
+
 .nz-rowmenu-pop button.danger {
   color: var(--danger);
 }

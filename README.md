@@ -75,7 +75,12 @@ NANOSEC_BUS_INTERNAL_TOKEN="…" \
 ## MCP tools
 
 `artifact_publish` · `artifact_list` · `space_list` · `tree_get` · `artifact_get` ·
-`artifact_rename` · `artifact_grant` · `artifact_delete`
+`artifact_rename` · `artifact_grant` · `artifact_delete` ·
+`folder_create` · `node_move` · `node_copy` · `node_delete`
+
+`artifact_delete` removes the work and every tree row that shows it. `node_delete`
+removes one row and refuses a folder that still holds nodes; a document's work goes
+with it when no other row shows it and the caller owns it.
 
 Seeded by `nanoadmin mcp seed` as `scope=platform`, opt-in per agent type — a new
 server must not silently widen what an agent can do.

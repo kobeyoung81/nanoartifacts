@@ -253,6 +253,9 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, "forbidden")
 	case isInvalid(err):
 		writeError(w, http.StatusBadRequest, "invalid request")
+	case isNotEmpty(err):
+		// 409 rather than 400: the request is well formed, the folder is not empty.
+		writeError(w, http.StatusConflict, "folder is not empty")
 	default:
 		slog.Error("request failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -262,6 +265,7 @@ func writeStoreError(w http.ResponseWriter, err error) {
 func isNotFound(err error) bool  { return errors.Is(err, store.ErrNotFound) }
 func isForbidden(err error) bool { return errors.Is(err, store.ErrForbidden) }
 func isInvalid(err error) bool   { return errors.Is(err, store.ErrInvalid) }
+func isNotEmpty(err error) bool  { return errors.Is(err, store.ErrNotEmpty) }
 
 // seqOf parses a version number from the path.
 func seqOf(r *http.Request) (int, error) {

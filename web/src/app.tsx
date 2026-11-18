@@ -24,7 +24,7 @@ import {
 } from './lib'
 import { loadRoute, saveRoute } from './routeMemory'
 import { NewSpaceDialog, NodeDialog, PromptDialog, SpaceSettings, TransferDialog } from './library/dialogs'
-import { type Toast } from './library/model'
+import { canDeleteNode, type Toast } from './library/model'
 import { DocumentView } from './library/DocumentView'
 import { DetailView } from './library/DetailView'
 import { SidebarView } from './library/SidebarView'
@@ -955,9 +955,15 @@ function Workbench({
             </button>
           ) : null}
           {canWrite ? (
-            <button className="danger" onClick={() => { setNodeDialog({ kind: 'delete', node: rowMenu.node }); setRowMenu(null) }}>
-              {zh ? '删除' : 'Delete'}
-            </button>
+            canDeleteNode(nodes, rowMenu.node) ? (
+              <button className="danger" onClick={() => { setNodeDialog({ kind: 'delete', node: rowMenu.node }); setRowMenu(null) }}>
+                {zh ? '删除' : 'Delete'}
+              </button>
+            ) : (
+              <button className="danger" disabled title={zh ? '目录非空，不能删除' : 'Folder is not empty'}>
+                {zh ? '删除（目录非空）' : 'Delete (folder is not empty)'}
+              </button>
+            )
           ) : null}
         </div>
       ) : null}

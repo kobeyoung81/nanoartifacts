@@ -34,6 +34,9 @@ var (
 	ErrForbidden = errors.New("forbidden")
 	// ErrInvalid means the request itself is wrong (unknown kind, empty title).
 	ErrInvalid = errors.New("invalid request")
+	// ErrNotEmpty refuses to delete a folder that still holds nodes. Emptying it
+	// first is the same rule the library states in the UI.
+	ErrNotEmpty = errors.New("folder is not empty")
 )
 
 // Artifact is one published work.
@@ -435,6 +438,57 @@ func (s *Store) RenameWork(ctx context.Context, artifactID, title string) (int64
 		return 0, fmt.Errorf("rename artifact nodes: %w", err)
 	}
 	return nodes.ModifiedCount, nil
+}
+
+// DeleteWorkResult reports what one work deletion removed.
+type DeleteWorkResult struct {
+	NodesDeleted int
+}
+
+// DeleteWork soft-deletes a work and every live tree node that shows it.
+//
+// The library lists works through nodes.title, so deleting only the artifact row
+// leaves a row that opens onto a 404. Nodes go first: if the second write fails
+// the work is left in its owner's list (recoverable) instead of a visible row
+// pointing at nothing.
+func (s *Store) DeleteWork(ctx context.Context, artifactID, userID string) (DeleteWorkResult, error) {
+	a, err := s.Get(ctx, artifactID)
+	if err != nil {
+		return DeleteWorkResult{}, err
+	}
+	if a.OwnerUserID != userID {
+		return DeleteWorkResult{}, ErrForbidden
+	}
+	nodes, err := s.NodesForArtifact(ctx, artifactID)
+	if err != nil {
+		return DeleteWorkResult{}, err
+	}
+	for _, node := range nodes {
+		children, err := s.liveChildren(ctx, node.ID)
+		if err != nil {
+			return DeleteWorkResult{}, err
+		}
+		if children > 0 {
+			return DeleteWorkResult{}, fmt.Errorf("%w: %q holds nodes", ErrNotEmpty, node.Title)
+		}
+	}
+
+	now := time.Now().UTC()
+	if len(nodes) > 0 {
+		ids := make([]string, 0, len(nodes))
+		for _, node := range nodes {
+			ids = append(ids, node.ID)
+		}
+		if _, err := s.db.Collection(nodesCollection).UpdateMany(ctx,
+			bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}}, {Key: "deleted_at", Value: nil}},
+			bson.D{{Key: "$set", Value: bson.D{{Key: "deleted_at", Value: now}}}}); err != nil {
+			return DeleteWorkResult{}, fmt.Errorf("delete work nodes: %w", err)
+		}
+	}
+	if err := s.SoftDelete(ctx, artifactID, userID); err != nil {
+		return DeleteWorkResult{}, err
+	}
+	return DeleteWorkResult{NodesDeleted: len(nodes)}, nil
 }
 
 // SoftDelete hides the artifact from every list and lookup. The rows stay so an

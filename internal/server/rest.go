@@ -338,7 +338,7 @@ func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
-	if err := s.Store.SoftDelete(r.Context(), r.PathValue("id"), userOf(r)); err != nil {
+	if _, err := s.Store.DeleteWork(r.Context(), r.PathValue("id"), userOf(r)); err != nil {
 		writeStoreError(w, err)
 		return
 	}

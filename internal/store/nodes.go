@@ -59,6 +59,69 @@ func (s *Store) ListNodes(ctx context.Context, spaceID string) ([]Node, error) {
 	if err := cur.All(ctx, &out); err != nil {
 		return nil, fmt.Errorf("decode nodes: %w", err)
 	}
+	// A work can be gone while its row survives (deleted out of band, or by a
+	// path that predates the tree write). Such a row opens onto a 404, so the
+	// tree does not offer it.
+	return s.dropDanglingNodes(ctx, out)
+}
+
+// dropDanglingNodes removes nodes whose work no longer exists or was deleted.
+func (s *Store) dropDanglingNodes(ctx context.Context, nodes []Node) ([]Node, error) {
+	ids := make([]string, 0, len(nodes))
+	seen := map[string]bool{}
+	for _, node := range nodes {
+		if node.ArtifactID != "" && !seen[node.ArtifactID] {
+			seen[node.ArtifactID] = true
+			ids = append(ids, node.ArtifactID)
+		}
+	}
+	if len(ids) == 0 {
+		return nodes, nil
+	}
+	cur, err := s.db.Collection(artifactsCollection).Find(ctx, bson.D{
+		{Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}},
+		{Key: "deleted_at", Value: nil},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list work rows: %w", err)
+	}
+	defer func() { _ = cur.Close(ctx) }()
+	live := make(map[string]bool, len(ids))
+	for cur.Next(ctx) {
+		var row struct {
+			ID string `bson:"_id"`
+		}
+		if err := cur.Decode(&row); err != nil {
+			return nil, fmt.Errorf("decode work row: %w", err)
+		}
+		live[row.ID] = true
+	}
+	if err := cur.Err(); err != nil {
+		return nil, fmt.Errorf("list work rows: %w", err)
+	}
+	kept := make([]Node, 0, len(nodes))
+	for _, node := range nodes {
+		if node.ArtifactID == "" || live[node.ArtifactID] {
+			kept = append(kept, node)
+		}
+	}
+	return kept, nil
+}
+
+// NodesForArtifact returns every live tree node that shows a work.
+func (s *Store) NodesForArtifact(ctx context.Context, artifactID string) ([]Node, error) {
+	cur, err := s.db.Collection(nodesCollection).Find(ctx, bson.D{
+		{Key: "artifact_id", Value: artifactID},
+		{Key: "deleted_at", Value: nil},
+	}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
+	if err != nil {
+		return nil, fmt.Errorf("list work nodes: %w", err)
+	}
+	defer func() { _ = cur.Close(ctx) }()
+	out := []Node{}
+	if err := cur.All(ctx, &out); err != nil {
+		return nil, fmt.Errorf("decode work nodes: %w", err)
+	}
 	return out, nil
 }
 
@@ -427,24 +490,75 @@ func (s *Store) AttachArtifact(ctx context.Context, nodeID, artifactID string) e
 	return nil
 }
 
-// DeleteNode soft-deletes a node and everything under it.
-func (s *Store) DeleteNode(ctx context.Context, nodeID string) error {
+// DeleteNodeResult reports what one tree deletion removed.
+type DeleteNodeResult struct {
+	NodeID           string
+	ArtifactsDeleted int
+	ArtifactsKept    int
+}
+
+// DeleteNode soft-deletes one node.
+//
+// A folder that still holds nodes is refused: the caller empties it first, which
+// is the same rule the UI states. A document's work goes with it when nobody
+// else shows it and the caller owns it; another user's work is left where it is
+// (their library still lists it), and the result says so.
+func (s *Store) DeleteNode(ctx context.Context, nodeID, actor string) (DeleteNodeResult, error) {
 	node, err := s.NodeByID(ctx, nodeID)
 	if err != nil {
-		return err
+		return DeleteNodeResult{}, err
 	}
-	ids, err := s.subtreeIDs(ctx, node.SpaceID, node.ID)
+	children, err := s.liveChildren(ctx, node.ID)
 	if err != nil {
-		return err
+		return DeleteNodeResult{}, err
 	}
+	if children > 0 {
+		return DeleteNodeResult{}, fmt.Errorf("%w: %q holds nodes", ErrNotEmpty, node.Title)
+	}
+
 	now := time.Now().UTC()
-	_, err = s.db.Collection(nodesCollection).UpdateMany(ctx,
-		bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}}},
-		bson.D{{Key: "$set", Value: bson.D{{Key: "deleted_at", Value: now}}}})
-	if err != nil {
-		return fmt.Errorf("delete nodes: %w", err)
+	if _, err := s.db.Collection(nodesCollection).UpdateOne(ctx,
+		bson.D{{Key: "_id", Value: node.ID}, {Key: "deleted_at", Value: nil}},
+		bson.D{{Key: "$set", Value: bson.D{{Key: "deleted_at", Value: now}}}}); err != nil {
+		return DeleteNodeResult{}, fmt.Errorf("delete node: %w", err)
 	}
-	return nil
+
+	result := DeleteNodeResult{NodeID: node.ID}
+	if node.ArtifactID == "" || node.Kind == "folder" {
+		return result, nil
+	}
+	remaining, err := s.db.Collection(nodesCollection).CountDocuments(ctx, bson.D{
+		{Key: "artifact_id", Value: node.ArtifactID},
+		{Key: "deleted_at", Value: nil},
+	})
+	if err != nil {
+		return result, fmt.Errorf("count work nodes: %w", err)
+	}
+	if remaining > 0 {
+		result.ArtifactsKept = 1
+		return result, nil
+	}
+	if err := s.SoftDelete(ctx, node.ArtifactID, actor); err != nil {
+		if errors.Is(err, ErrForbidden) {
+			result.ArtifactsKept = 1
+			return result, nil
+		}
+		return result, err
+	}
+	result.ArtifactsDeleted = 1
+	return result, nil
+}
+
+// liveChildren counts the nodes directly under nodeID.
+func (s *Store) liveChildren(ctx context.Context, nodeID string) (int64, error) {
+	n, err := s.db.Collection(nodesCollection).CountDocuments(ctx, bson.D{
+		{Key: "parent_id", Value: nodeID},
+		{Key: "deleted_at", Value: nil},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count children: %w", err)
+	}
+	return n, nil
 }
 
 // subtreeIDs returns the node and all its descendants, breadth first.

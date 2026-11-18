@@ -355,9 +355,13 @@ export function NodeDialog({
         <h3>{state.kind === 'rename' ? (zh ? '重命名' : 'Rename') : zh ? '删除' : 'Delete'}</h3>
         {state.kind === 'delete' ? (
           <p>
-            {zh
-              ? `「${state.node.title}」及其内容会被删除，其他人将无法再访问。`
-              : `"${state.node.title}" and everything under it will be removed.`}
+            {state.node.kind === 'folder'
+              ? zh
+                ? `「${state.node.title}」将被删除（只能删除空目录）。`
+                : `"${state.node.title}" will be removed (folders must be empty).`
+              : zh
+                ? `「${state.node.title}」将被删除；若作品只被这一行引用且属于你，作品也会一并删除。`
+                : `"${state.node.title}" will be removed; its work goes too when no other row shows it and you own it.`}
           </p>
         ) : (
           <>
