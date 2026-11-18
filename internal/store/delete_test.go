@@ -184,3 +184,26 @@ func TestListNodesHidesRowsWhoseWorkIsGone(t *testing.T) {
 		t.Fatalf("nodes = %+v, want only the live work's row", nodes)
 	}
 }
+
+// A row can outlive its work: that is exactly the leftover this change sets out
+// to remove, so deleting it must succeed rather than trip over the missing work.
+func TestDeleteNodeRemovesARowWhoseWorkIsAlreadyGone(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+	space, _ := st.CreateSpace(ctx, "u1", "残留", "members")
+	node, err := st.CreateNode(ctx, space.ID, "", "document", "残留行", "u1", "no-such-work")
+	if err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+
+	result, err := st.DeleteNode(ctx, node.ID, "u1")
+	if err != nil {
+		t.Fatalf("delete leftover row: %v", err)
+	}
+	if result.ArtifactsDeleted != 0 || result.ArtifactsKept != 0 {
+		t.Fatalf("result = %+v, want nothing to report about the work", result)
+	}
+	if _, err := st.NodeByID(ctx, node.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("row survived: %v", err)
+	}
+}

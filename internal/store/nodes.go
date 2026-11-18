@@ -539,11 +539,16 @@ func (s *Store) DeleteNode(ctx context.Context, nodeID, actor string) (DeleteNod
 		return result, nil
 	}
 	if err := s.SoftDelete(ctx, node.ArtifactID, actor); err != nil {
-		if errors.Is(err, ErrForbidden) {
+		switch {
+		case errors.Is(err, ErrForbidden):
 			result.ArtifactsKept = 1
-			return result, nil
+		case errors.Is(err, ErrNotFound):
+			// The work was already gone: this row was the leftover, and deleting
+			// it is the whole point.
+		default:
+			return result, err
 		}
-		return result, err
+		return result, nil
 	}
 	result.ArtifactsDeleted = 1
 	return result, nil
