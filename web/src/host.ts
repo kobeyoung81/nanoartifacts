@@ -6,12 +6,17 @@
 // page cannot hand this app a token.
 
 export type Theme = 'light' | 'dark'
+// 与 portal 的 lib/theme.tsx 对齐：主题是两个正交的轴，目前各一档。
+export type Structure = 'graphite'
+export type Palette = 'slate'
 
 type InitMessage = {
   type: 'nanoartifacts.init'
   token: string | null
   locale?: string
   theme?: Theme
+  structure?: Structure
+  palette?: Palette
 }
 
 // A panel runs inside the shell's page, not in a frame: there is no parent to
@@ -64,7 +69,19 @@ export function isEmbedded(): boolean {
 // listen installs the message handler. It also adopts the theme from the
 // document when running standalone, so the app is readable outside the portal.
 export function listen(): void {
-  theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+  // 首帧由 URL 预置（避免白闪），之后的切换走 postMessage。
+  const params = new URLSearchParams(window.location.search)
+  const initialTheme = params.get('theme')
+  const initialStructure = params.get('structure')
+  const initialPalette = params.get('palette')
+  theme = initialTheme === 'dark' || initialTheme === 'light'
+    ? initialTheme
+    : document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+  applyTheme(
+    theme,
+    initialStructure === 'graphite' ? 'graphite' : 'graphite',
+    initialPalette === 'slate' ? 'slate' : 'slate',
+  )
   window.addEventListener('message', (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return
     const data = event.data as InitMessage | null
@@ -73,13 +90,17 @@ export function listen(): void {
     token = data.token ?? null
     locale = data.locale || locale
     theme = data.theme || theme
-    applyTheme(theme)
+    applyTheme(theme, data.structure || 'graphite', data.palette || 'slate')
     emit()
   })
 }
 
-export function applyTheme(next: Theme): void {
-  document.documentElement.classList.toggle('dark', next === 'dark')
+export function applyTheme(next: Theme, structure: Structure = 'graphite', palette: Palette = 'slate'): void {
+  const root = document.documentElement
+  root.classList.toggle('dark', next === 'dark')
+  root.dataset.structure = structure
+  root.dataset.palette = palette
+  root.style.colorScheme = next
 }
 
 // reportHash keeps the parent's address bar in step with this app's routing.

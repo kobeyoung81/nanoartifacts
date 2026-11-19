@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import app from '../app.tsx?raw'
 import panels from './panels.tsx?raw'
 import styles from '../styles.css?raw'
+import theme from '../theme.generated.css?raw'
 import panelStyles from '../panel.css?raw'
 import sidebar from '../library/SidebarView.tsx?raw'
 import detail from '../library/DetailView.tsx?raw'
@@ -93,8 +94,10 @@ describe('space switcher', () => {
   it('tells native controls which colour scheme to use', () => {
     // The dialog selects and scrollbars follow this; the remote build drops
     // :root/.dark, so the plugin root declares it too.
-    expect(styles).toContain('color-scheme: light')
-    expect(styles).toContain('color-scheme: dark')
+    // 颜色值在生成文件里（从 portal 的 tokens.json 同步），样式表只负责 @import。
+    expect(styles).toContain("@import './theme.generated.css'")
+    expect(theme).toContain('color-scheme: light')
+    expect(theme).toContain('color-scheme: dark')
     expect(panels).toContain('html.dark .plugin-nanoartifacts')
     expect(panels).toContain('color-scheme: dark')
   })

@@ -1,52 +1,9 @@
-/* Colour tokens are the portal's, copied verbatim from
-   nanoportal/web/src/index.css. The library is framed by the portal's own top
-   bar, so a second palette would make the two halves of one screen look like
-   two products. Keep the :root and .dark blocks in step with that file.
-   Note the naming: --primary is the brand colour, --accent is the hover
-   surface. The design doc used the opposite names; do not copy it back. */
-:root {
-  /* Tells the browser which palette its own controls (a native <select> list, a
-     scrollbar) should use. Without it those follow the desktop's preference and
-     stand out from the app's theme. */
-  color-scheme: light;
-  --background: #f8fafc;
-  --foreground: #101828;
-  --card: #ffffff;
-  --border: #e2e8f0;
-  --muted: #f1f5f9;
-  --muted-foreground: #62748e;
-  --primary: #155dfc;
-  --primary-foreground: #f8fafc;
-  --primary-tint: rgb(21 93 252 / 12%);
-  --accent: #e2e8f0;
-  --success: #009966;
-  --warning: #fe9a00;
-  --danger: #e7000b;
-  --info: #1447e6;
-  --radius: 0.625rem;
-  --radius-xl: 0.875rem;
-  --font:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Color Emoji',
-    sans-serif;
-}
+/* Colour tokens: generated from nanoportal/web/src/styles/tokens.json by
+   `npm run sync:theme` in nanoportal. The library is framed by the portal, so a
+   second palette would make the two halves of one screen look like two products.
+   Note the naming: --primary is the brand colour, --accent is the hover surface. */
+@import './theme.generated.css';
 
-.dark {
-  color-scheme: dark;
-  --background: #030a19;
-  --foreground: #fafafa;
-  --card: #071020;
-  --border: #1f293a;
-  --muted: #1a2435;
-  --muted-foreground: #98a0b0;
-  --primary: #6ba2e9;
-  --primary-foreground: #030a19;
-  --primary-tint: rgb(107 162 233 / 16%);
-  --accent: #132946;
-  --success: #2dba86;
-  --warning: #f1af1a;
-  --danger: #ff6467;
-  --info: #3986e4;
-}
 
 * {
   box-sizing: border-box;

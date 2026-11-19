@@ -42,13 +42,9 @@ html.dark .plugin-nanoartifacts { color-scheme: dark; }
   min-height: 0;
   display: flex;
   flex-direction: column;
-  --primary-tint: color-mix(in oklab, var(--primary) 12%, transparent);
-  --radius-xl: calc(var(--radius) + 0.25rem);
+  /* --primary-tint / --radius-xl 由 host 的 token 继承（同源生成），
+     这里只补字体栈 —— 它不是颜色，不随主题变。 */
   --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Color Emoji', sans-serif;
-}
-@supports not (color: color-mix(in oklab, red, blue)) {
-  .plugin-nanoartifacts { --primary-tint: rgb(21 93 252 / 12%); }
-  html.dark .plugin-nanoartifacts { --primary-tint: rgb(107 162 233 / 16%); }
 }
 `
 
